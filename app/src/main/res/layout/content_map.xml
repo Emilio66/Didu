@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_gray">
+
+    <com.baidu.mapapi.map.MapView
+        android:id="@+id/bmapView"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="20dp"
+            android:layout_marginRight="20dp"
+            android:layout_marginTop="15dp"
+            android:orientation="horizontal"
+            android:layout_alignParentTop="true"
+            android:gravity="center">
+            <ImageView
+                android:id="@+id/bn_setting"
+                android:layout_width="35dp"
+                android:layout_height="35dp"
+                android:src="@drawable/bn_setting_selector" />
+            <AutoCompleteTextView
+                android:id="@+id/searchkey"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.88"
+                android:text="请输入寻找的地点" />
+            <ImageView
+                android:id="@+id/bn_news"
+                android:layout_width="35dp"
+                android:layout_height="35dp"
+                android:src="@drawable/bn_news_selector"/>
+
+        </LinearLayout>
+
+
+
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="20dp"
+            android:layout_marginBottom="20dp"
+            android:orientation="vertical"
+            android:layout_alignParentBottom="true"
+            android:gravity="right">
+
+            <ImageView
+                android:id="@+id/bn_locate"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:src="@drawable/bn_locate_selector"/>
+            <ImageView
+                android:id="@+id/bn_drawing"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_marginTop="15dp"
+                android:src="@drawable/bn_drawing_selector"/>
+
+        </LinearLayout>
+    </RelativeLayout>
+
+</FrameLayout>
