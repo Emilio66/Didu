@@ -8,12 +8,15 @@ import android.os.SystemClock;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.baidu.mapapi.SDKInitializer;
@@ -27,6 +30,7 @@ import com.baidu.mapapi.search.poi.PoiDetailResult;
 import com.baidu.mapapi.search.poi.PoiDetailSearchOption;
 import com.baidu.mapapi.search.poi.PoiResult;
 import com.baidu.mapapi.search.poi.PoiSearch;
+
 import com.baidu.mapapi.search.sug.OnGetSuggestionResultListener;
 import com.baidu.mapapi.search.sug.SuggestionResult;
 import com.baidu.mapapi.search.sug.SuggestionSearch;
@@ -35,7 +39,7 @@ import com.reflection.didu.didu.R;
 import com.reflection.didu.didu.news.NewsActivity;
 import com.reflection.didu.didu.setting.SettingActivity;
 import com.baidu.location.BDLocation;
-//import com.baidu.mapapi.overlayutil.PoiOverlay;
+
 import com.baidu.location.BDLocationListener;
 import com.baidu.location.LocationClient;
 import com.baidu.location.LocationClientOption;
@@ -60,15 +64,13 @@ import com.baidu.mapapi.map.PolylineOptions;
 import com.baidu.mapapi.map.Stroke;
 import com.baidu.mapapi.map.UiSettings;
 import com.baidu.mapapi.model.LatLng;
-import com.baidu.mapapi.model.LatLngBounds;
 
-import com.reflection.didu.didu.R;
-import com.reflection.didu.didu.news.NewsActivity;
-import com.reflection.didu.didu.setting.SettingActivity;
-
+//map source code
+import com.baidu.mapapi.overlayutil.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 
 public class MapActivity extends Activity implements
@@ -104,6 +106,25 @@ public class MapActivity extends Activity implements
 
     //搜索相关
     private PoiSearch mPoiSearch;
+    private AutoCompleteTextView input;
+
+    class MyPoiOverlay extends PoiOverlay {
+
+        public MyPoiOverlay(BaiduMap baiduMap) {
+            super(baiduMap);
+        }
+
+        @Override
+        public boolean onPoiClick(int index) {
+            super.onPoiClick(index);
+            PoiInfo poi = getPoiResult().getAllPoi().get(index);
+            // if (poi.hasCaterDetails) {
+            mPoiSearch.searchPoiDetail((new PoiDetailSearchOption())
+                    .poiUid(poi.uid));
+            // }
+            return true;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -111,8 +132,27 @@ public class MapActivity extends Activity implements
         SDKInitializer.initialize(getApplicationContext());
         setContentView(R.layout.content_map);
         initUI();
-        //search init
 
+        //search init
+        input = (AutoCompleteTextView) findViewById(R.id.searchkey);
+        input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+        input.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                //点击回车，触发搜索
+                if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_SEND
+                        || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+                    String interest = input.getEditableText().toString();
+                    Toast.makeText(getApplicationContext(), "Search " + interest, Toast.LENGTH_LONG).show();
+                    Log.d("DIDU", "Search " + input.getEditableText().toString());
+                    mPoiSearch.searchInCity((new PoiCitySearchOption())
+                            .city("上海")
+                            .keyword(interest)
+                            .pageNum(10));
+                }
+                return true;
+            }
+        });
 
         // 地图初始化
         mMapView = (MapView) findViewById(R.id.bmapView);
@@ -120,7 +160,7 @@ public class MapActivity extends Activity implements
         mUiSettings = mBaiduMap.getUiSettings();
         // 开启定位图层
         mBaiduMap.setMyLocationEnabled(true);
-        mBaiduMap.showMapPoi(false);
+        //mBaiduMap.showMapPoi(false);
         // 定位初始化
         mLocClient = new LocationClient(this);
         mLocClient.registerLocationListener(myListener1);
@@ -130,8 +170,8 @@ public class MapActivity extends Activity implements
         option.setScanSpan(1000);
         mLocClient.setLocOption(option);
         mLocClient.start();
-        mCurrentMarker = BitmapDescriptorFactory
-                .fromResource(R.drawable.icon_coordinate1);
+       // mCurrentMarker = BitmapDescriptorFactory
+        //        .fromResource(R.drawable.icon_coordinate1);
         mCurrentMode = MyLocationConfiguration.LocationMode.NORMAL;
         mBaiduMap
                 .setMyLocationConfigeration(new MyLocationConfiguration(
@@ -140,15 +180,86 @@ public class MapActivity extends Activity implements
         MapStatusUpdate msu = MapStatusUpdateFactory.zoomTo(14.0f);
         mBaiduMap.setMapStatus(msu);
 
+        // 初始化搜索模块，注册搜索事件监听
+        mPoiSearch = PoiSearch.newInstance();
+        mPoiSearch.setOnGetPoiSearchResultListener(new OnGetPoiSearchResultListener() {
+            @Override
+            public void onGetPoiResult(PoiResult result) {
+                if (result == null
+                        || result.error == SearchResult.ERRORNO.RESULT_NOT_FOUND) {
+                    Toast.makeText(MapActivity.this, "未找到结果", Toast.LENGTH_LONG)
+                            .show();
+                    return;
+                }
+                if (result.error == SearchResult.ERRORNO.NO_ERROR) {
+                    mBaiduMap.clear();
+                    PoiOverlay overlay = new MyPoiOverlay(mBaiduMap);
+                    mBaiduMap.setOnMarkerClickListener(overlay);
+                    overlay.setData(result);
+                    overlay.addToMap();
+                    overlay.zoomToSpan();
+                    return;
+                }
+                if (result.error == SearchResult.ERRORNO.AMBIGUOUS_KEYWORD) {
+
+                    // 当输入关键字在本市没有找到，但在其他城市找到时，返回包含该关键字信息的城市列表
+                    String strInfo = "在";
+                    for (CityInfo cityInfo : result.getSuggestCityList()) {
+                        strInfo += cityInfo.city;
+                        strInfo += ",";
+                    }
+                    strInfo += "找到结果";
+                    Toast.makeText(MapActivity.this, strInfo, Toast.LENGTH_LONG)
+                            .show();
+                }
+            }
+
+            @Override
+            public void onGetPoiDetailResult(PoiDetailResult result) {
+                if (result.error != SearchResult.ERRORNO.NO_ERROR) {
+                    Toast.makeText(MapActivity.this, "抱歉，未找到结果", Toast.LENGTH_SHORT)
+                            .show();
+                } else {
+                    Toast.makeText(MapActivity.this, result.getName() + ": " + result.getAddress(), Toast.LENGTH_SHORT)
+                            .show();
+                }
+            }
+        });
+    }
+        //mBaiduMap = ((SupportMapFragment) (getSupportFragmentManager()
+        //        .findFragmentById(R.id.map))).getBaiduMap();
         //init poi search
-        OnGetPoiSearchResultListener poiListener = new OnGetPoiSearchResultListener(){
-            public void onGetPoiResult(PoiResult result){
-                //获取POI检索结果
-            }
-            public void onGetPoiDetailResult(PoiDetailResult result){
-                //获取Place详情页检索结果
-            }
-        };
+        /*OnGetPoiSearchResultListener poiListener = new OnGetPoiSearchResultListener(){
+            @Override
+            public void onGetPoiResult(PoiResult result) {
+                if (result == null
+                        || result.error == SearchResult.ERRORNO.RESULT_NOT_FOUND) {
+                    Toast.makeText(MapActivity.this, "未找到结果", Toast.LENGTH_LONG)
+                            .show();
+                    return;
+                }
+                if (result.error == SearchResult.ERRORNO.NO_ERROR) {
+                    mBaiduMap.clear();
+                    PoiOverlay  overlay = new MyPoiOverlay(mBaiduMap);
+                    mBaiduMap.setOnMarkerClickListener(overlay);
+                    overlay.setData(result);
+                    overlay.addToMap();
+                    overlay.zoomToSpan();
+                    return;
+                }
+                if (result.error == SearchResult.ERRORNO.AMBIGUOUS_KEYWORD) {
+
+                    // 当输入关键字在本市没有找到，但在其他城市找到时，返回包含该关键字信息的城市列表
+                    String strInfo = "在";
+                    for (CityInfo cityInfo : result.getSuggestCityList()) {
+                        strInfo += cityInfo.city;
+                        strInfo += ",";
+                    }
+                    strInfo += "找到结果";
+                    Toast.makeText(MapActivity.this, strInfo, Toast.LENGTH_LONG)
+                            .show();
+                }
+        }
 
         mPoiSearch =  PoiSearch.newInstance();
         mPoiSearch.setOnGetPoiSearchResultListener(poiListener);
@@ -158,7 +269,7 @@ public class MapActivity extends Activity implements
                 .keyword("美食")
                 .pageNum(10));
 
-    }
+    }*/
 
 
 
@@ -316,7 +427,7 @@ public class MapActivity extends Activity implements
                     path = new ArrayList<>();//redrawing
                     pos = mBaiduMap.getProjection().fromScreenLocation(new Point((int)ev.getX(),(int)ev.getY()));
                     path.add(pos);
-                    Log.d("DIDU"," Action down,First Path " + +path.size()+" "+path.toString());
+                    Log.d("DIDU"," Action down,First Path "+path.size()+" "+path.toString());
                 }
                 //手指移动，画出历史轨迹
                 else if(ev.getAction() == MotionEvent.ACTION_MOVE) {
@@ -337,13 +448,19 @@ public class MapActivity extends Activity implements
                         mBaiduMap.addOverlay(ooPolygon);
                         Log.d("DIDU", " up drawing polygon");
                         path_record = path;
-                        Log.d("DIDU", "path_record "+path_record.toString());
+                        Log.d("DIDU", path.size()+" path_record "+path_record.toString());
 
-                        SystemClock.sleep(1000);
+                        //path转化成json string
+                        String jsonPath = JsonUtil.list2string(path_record);
+                        SystemClock.sleep(300);
                         //弹出文本框，并且让用户输入提醒的内容
                         DialogInput input = new DialogInput();
+                        Bundle bundle =new Bundle();
+                        bundle.putString("path",jsonPath);
+                        Log.d("DIDU", "json path: "+ jsonPath);
+                        input.setArguments(bundle);
                         input.show(getFragmentManager(),"test");
-
+                        //得到提醒内容
 
 
                     } else {
@@ -376,7 +493,7 @@ public class MapActivity extends Activity implements
                 Log.d("DIDU"," --- IS point in circle "+ click_point_in_poly );
                 if(click_point_in_poly){
                     //弹出文本框，显示提醒内容
-                    SystemClock.sleep(1000);
+                    SystemClock.sleep(600);
                     //弹出文本框，并且让用户输入提醒的内容
                     DialogComplete complete = new DialogComplete();
                     Bundle bundle = new Bundle();
@@ -421,6 +538,7 @@ public class MapActivity extends Activity implements
                 LatLng ll = new LatLng(location.getLatitude(),
                         location.getLongitude());
                 mylocll = ll;
+                Log.d("DIDU"," location: "+mylocll);
                 MapStatus.Builder builder = new MapStatus.Builder();
                 builder.target(ll).zoom(18.0f);
                 mBaiduMap.animateMapStatus(MapStatusUpdateFactory.newMapStatus(builder.build()));
