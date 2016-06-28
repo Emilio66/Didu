@@ -19,6 +19,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.baidu.location.BDNotifyListener;
 import com.baidu.mapapi.SDKInitializer;
 import com.baidu.mapapi.map.SupportMapFragment;
 import com.baidu.mapapi.search.core.CityInfo;
@@ -96,6 +97,15 @@ public class MapActivity extends Activity implements
 
     private List<LatLng> path =null; //drawing path
     private List<LatLng> path_record =null; //record path
+    private List<List<LatLng>> path_list;
+    class peak_value {
+        double max_latitude;
+        double max_longitude;
+        double min_latitude;
+        double min_longitude;
+
+    }
+    private List<peak_value> peak_value_list;
 
     boolean isFirstLoc = true; // 是否首次定位
     private static final int accuracyCircleFillColor = 0xAAFFFF88;
@@ -107,6 +117,10 @@ public class MapActivity extends Activity implements
     //搜索相关
     private PoiSearch mPoiSearch;
     private AutoCompleteTextView input;
+
+    //提醒内容
+    private String content;
+    private DialogInput dialogInput;
 
     class MyPoiOverlay extends PoiOverlay {
 
@@ -173,10 +187,10 @@ public class MapActivity extends Activity implements
        // mCurrentMarker = BitmapDescriptorFactory
         //        .fromResource(R.drawable.icon_coordinate1);
         mCurrentMode = MyLocationConfiguration.LocationMode.NORMAL;
-        mBaiduMap
+       /* mBaiduMap
                 .setMyLocationConfigeration(new MyLocationConfiguration(
                         mCurrentMode, true, mCurrentMarker));
-
+*/
         MapStatusUpdate msu = MapStatusUpdateFactory.zoomTo(14.0f);
         mBaiduMap.setMapStatus(msu);
 
@@ -225,52 +239,15 @@ public class MapActivity extends Activity implements
                 }
             }
         });
-    }
-        //mBaiduMap = ((SupportMapFragment) (getSupportFragmentManager()
-        //        .findFragmentById(R.id.map))).getBaiduMap();
-        //init poi search
-        /*OnGetPoiSearchResultListener poiListener = new OnGetPoiSearchResultListener(){
-            @Override
-            public void onGetPoiResult(PoiResult result) {
-                if (result == null
-                        || result.error == SearchResult.ERRORNO.RESULT_NOT_FOUND) {
-                    Toast.makeText(MapActivity.this, "未找到结果", Toast.LENGTH_LONG)
-                            .show();
-                    return;
-                }
-                if (result.error == SearchResult.ERRORNO.NO_ERROR) {
-                    mBaiduMap.clear();
-                    PoiOverlay  overlay = new MyPoiOverlay(mBaiduMap);
-                    mBaiduMap.setOnMarkerClickListener(overlay);
-                    overlay.setData(result);
-                    overlay.addToMap();
-                    overlay.zoomToSpan();
-                    return;
-                }
-                if (result.error == SearchResult.ERRORNO.AMBIGUOUS_KEYWORD) {
 
-                    // 当输入关键字在本市没有找到，但在其他城市找到时，返回包含该关键字信息的城市列表
-                    String strInfo = "在";
-                    for (CityInfo cityInfo : result.getSuggestCityList()) {
-                        strInfo += cityInfo.city;
-                        strInfo += ",";
-                    }
-                    strInfo += "找到结果";
-                    Toast.makeText(MapActivity.this, strInfo, Toast.LENGTH_LONG)
-                            .show();
-                }
+        path_list= new ArrayList<>();
+        peak_value_list = new ArrayList<>();
+        //add json data to path_list and peak_value_list
+        for (int i = 0; i < path_list.size(); i++) {
+            register_notify_location(path_list.get(i),peak_value_list.get(i));
         }
 
-        mPoiSearch =  PoiSearch.newInstance();
-        mPoiSearch.setOnGetPoiSearchResultListener(poiListener);
-
-        mPoiSearch.searchInCity((new PoiCitySearchOption())
-                .city("北京")
-                .keyword("美食")
-                .pageNum(10));
-
-    }*/
-
+    }
 
 
     private void initUI(){
@@ -345,7 +322,7 @@ public class MapActivity extends Activity implements
     private void startAlert(){
         DialogComplete complete = new DialogComplete();
         Bundle bundle = new Bundle();
-        bundle.putString("test","娴嬭瘯娴嬭瘯娴嬭瘯");
+        bundle.putString("test",""+content);
         complete.setArguments(bundle);
         complete.show(getFragmentManager(),"test");
     }
@@ -358,37 +335,38 @@ public class MapActivity extends Activity implements
 
 
     //拿到一个多边形的外切矩形，用于第一步判断
-    private void get_max_min(List<LatLng> path) {
+    private void get_max_min(List<LatLng> path, peak_value pv) {
         int path_size = path.size();
-        max_latitude = 0;
-        min_latitude = 1000;
-        max_longitude = 0;
-        min_longitude = 1000;
+        pv.max_latitude = 0;
+        pv.min_latitude = 1000;
+        pv.max_longitude = 0;
+        pv. min_longitude = 1000;
         for (int i = 0; i < path_size; i++) {
             LatLng p = path.get(i);
-            if (max_longitude < p.longitude)
-                max_longitude = p.longitude;
-            if (max_latitude < p.latitude)
-                max_latitude = p.latitude;
-            if (min_longitude > p.longitude)
-                min_longitude = p.longitude;
-            if (min_latitude > p.latitude)
-                min_latitude = p.latitude;
+            if (pv.max_longitude < p.longitude)
+                pv.max_longitude = p.longitude;
+            if (pv.max_latitude < p.latitude)
+                pv.max_latitude = p.latitude;
+            if (pv.min_longitude > p.longitude)
+                pv.min_longitude = p.longitude;
+            if (pv.min_latitude > p.latitude)
+                pv.min_latitude = p.latitude;
         }
     }
 
     //判断一个点是否在多边形内部
-    private boolean point_in_poly(LatLng point, List<LatLng> path1, int path_size){
+    private boolean point_in_poly(LatLng point, List<LatLng> path1,peak_value pv ){
         int nCross = 0;
-        get_max_min(path1);
-        Log.d("DIDU", "min la "+min_latitude+ " min lo" + min_longitude
-                +" max la "+ max_latitude + " max lo " +max_longitude);
+        //get_max_min(path1, pv);
+        Log.d("DIDU", "min la "+pv.min_latitude+ " min lo" + pv.min_longitude
+                +" max la "+ pv.max_latitude + " max lo " +pv.max_longitude);
 
         //get_max_min(path1);
-        if(point.latitude > max_latitude || point.latitude < min_latitude
-                || point.longitude > max_longitude || point.longitude < min_longitude)
+        if(point.latitude > pv.max_latitude || point.latitude < pv.min_latitude
+                || point.longitude > pv.max_longitude || point.longitude < pv.min_longitude)
             return false;
 
+        int path_size =path1.size();
         for (int i = 0; i < path_size; i++) {
             LatLng p1 = path1.get(i);
             LatLng p2 = path1.get((i + 1) % path_size);
@@ -450,18 +428,24 @@ public class MapActivity extends Activity implements
                         path_record = path;
                         Log.d("DIDU", path.size()+" path_record "+path_record.toString());
 
+                        peak_value pv = new peak_value();
+                        get_max_min(path_record, pv);
+                        path_list.add(path_record);
+                        peak_value_list.add(pv);
+                        register_notify_location(path_record,pv);
+
                         //path转化成json string
                         String jsonPath = JsonUtil.list2string(path_record);
                         SystemClock.sleep(300);
                         //弹出文本框，并且让用户输入提醒的内容
-                        DialogInput input = new DialogInput();
+                        dialogInput = new DialogInput();
                         Bundle bundle =new Bundle();
                         bundle.putString("path",jsonPath);
                         Log.d("DIDU", "json path: "+ jsonPath);
-                        input.setArguments(bundle);
-                        input.show(getFragmentManager(),"test");
+                        dialogInput.setArguments(bundle);
+                        dialogInput.show(getFragmentManager(),"test");
                         //得到提醒内容
-
+                        //content = input.getReminder().toString();
 
                     } else {
                         //当用户不小心画了一条线，并不构成图时，我们就只显示这条线
@@ -488,21 +472,27 @@ public class MapActivity extends Activity implements
             public void onMapClick(LatLng latLng) {
                 //经纬度
                 Toast.makeText(getApplicationContext(),latLng.toString(),Toast.LENGTH_LONG).show();
-                boolean click_point_in_poly = point_in_poly(latLng, path_record,path_record.size());
-                Log.d("DIDU", "path_record "+path_record.toString());
-                Log.d("DIDU"," --- IS point in circle "+ click_point_in_poly );
-                if(click_point_in_poly){
-                    //弹出文本框，显示提醒内容
-                    SystemClock.sleep(600);
-                    //弹出文本框，并且让用户输入提醒的内容
-                    DialogComplete complete = new DialogComplete();
-                    Bundle bundle = new Bundle();
-                    bundle.putString("test","测试测试测试");
-                    complete.setArguments(bundle);
-                    complete.show(getFragmentManager(),"test");
-
-
+                int path_list_size = path_list.size();
+                boolean click_point_in_poly = false;
+                for(int i=0;i<path_list_size;i++){
+                    click_point_in_poly = point_in_poly(latLng, path_list.get(i), peak_value_list.get(i));
+                    if(click_point_in_poly){
+                        //弹出文本框，显示提醒内容
+                        SystemClock.sleep(300);
+                        //弹出文本框，并且让用户输入提醒的内容
+                        DialogComplete complete = new DialogComplete();
+                        if(dialogInput != null)
+                            content=dialogInput.getReminder().getEditableText().toString();
+                        Bundle bundle = new Bundle();
+                        bundle.putString("test",""+content);
+                        complete.setArguments(bundle);
+                        complete.show(getFragmentManager(),"test");
+                    }
                 }
+
+                Log.d("DIDU", "path_list size "+path_list.size());
+                Log.d("DIDU"," --- IS point in circle "+ click_point_in_poly );
+
             }
 
             @Override
@@ -513,7 +503,49 @@ public class MapActivity extends Activity implements
         mBaiduMap.setOnMapTouchListener(null);
     }
 
+    //register one notify for one area
+    private void register_notify_location(List<LatLng> region, peak_value pv){
+        double mid_latitude = (pv.max_latitude + pv.min_latitude)/2;
+        double mid_longitude = (pv.max_longitude + pv.min_longitude)/2;
+        double ridus = pv.max_latitude - pv.min_latitude + pv.max_longitude - pv.min_longitude;
+        // 位置提醒相关代码
+        MyNotifyListener notifyListener = new MyNotifyListener();
+        // 4个参数代表要位置提醒的点的坐标，具体含义依次为：纬度，经度，距离范围，坐标系类型(gcj02,gps,bd09,bd09ll)
+        notifyListener.SetNotifyLocation(mid_latitude, mid_longitude, 100,"bd09ll" );
+        mLocClient.registerNotify(notifyListener);
+    }
 
+    public class MyNotifyListener extends BDNotifyListener {
+        /**
+         * mlocation表示当前位置，distance是当前坐标中心点与设定位置提醒的坐标点之间的距离值。
+         */
+        @Override
+        public void onNotify(BDLocation mlocation, float distance) {
+            super.onNotify(mlocation, distance);
+            System.out.println("已经到设定位置附近。");
+            LatLng latLng = new LatLng(mlocation.getLatitude(), mlocation.getLongitude());
+            int path_list_size = path_list.size();
+            boolean click_point_in_poly = false;
+            for(int i=0;i<path_list_size;i++){
+                click_point_in_poly = point_in_poly(latLng, path_list.get(i), peak_value_list.get(i));
+                if(click_point_in_poly){
+                    //弹出文本框，显示提醒内容
+                    SystemClock.sleep(300);
+                    //弹出文本框，并且让用户输入提醒的内容
+                    DialogComplete complete = new DialogComplete();
+                    if(dialogInput != null)
+                        content=dialogInput.getReminder().getEditableText().toString();
+                    Bundle bundle = new Bundle();
+                    bundle.putString("test",""+content);
+                    complete.setArguments(bundle);
+                    complete.show(getFragmentManager(),"test");
+                }
+            }
+
+            //search
+        }
+
+    }
 
 
     /**
@@ -542,6 +574,10 @@ public class MapActivity extends Activity implements
                 MapStatus.Builder builder = new MapStatus.Builder();
                 builder.target(ll).zoom(18.0f);
                 mBaiduMap.animateMapStatus(MapStatusUpdateFactory.newMapStatus(builder.build()));
+            } else {
+                LatLng ll = new LatLng(location.getLatitude(),
+                        location.getLongitude());
+                mylocll = ll;
             }
         }
 
